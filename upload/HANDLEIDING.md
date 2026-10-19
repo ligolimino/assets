@@ -56,7 +56,7 @@ Reken op een halfuurtje. Doe de stappen in deze volgorde.
 5. Ga terug naar de Worker → **Settings** → **Variables and Secrets** →
    **Add**. Voeg er drie toe:
 
-   | Type | Naam | Waarde |
+| Type | Naam | Waarde |
    |---|---|---|
    | Text | `GITHUB_APP_ID` | het App ID uit stap 1.6 |
    | Secret | `GITHUB_PRIVATE_KEY` | de volledige inhoud van het `.pem`-bestand (open het met Kladblok, alles kopiëren, ook de regels met BEGIN en END) |
