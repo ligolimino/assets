@@ -1,16 +1,16 @@
 # Uploadverbinding instellen (eenmalig)
 
 Met deze verbinding kunnen lesgevers op de createpagina een nieuwe opname
-toevoegen, zonder GitHub-account. Ze typen alleen een **teamcode**.
+of afbeelding toevoegen, zonder GitHub-account. Ze typen alleen een **teamcode**.
 
 ```
-createpagina  →  Cloudflare Worker (bewaart de sleutel)  →  GitHub: ligolimino/audio
+createpagina  →  Cloudflare Worker (bewaart de sleutel)  →  GitHub: ligolimino/assets
 ```
 
 **Belangrijk om te weten**
 
-- De Worker kan alleen **nieuwe mp3-bestanden toevoegen** in deze
-  repository. Overschrijven, verwijderen of iets in andere repositories
+- De Worker kan alleen **nieuwe bestanden toevoegen** (mp3-opnames en
+  afbeeldingen) in deze repository. Overschrijven, verwijderen of iets in andere repositories
   aanpassen kan niet.
 - Werkt de verbinding niet (meer), dan verdwijnen de uploadknoppen
   vanzelf. Alle tools, links en opnames blijven gewoon werken.
@@ -42,7 +42,7 @@ Reken op een halfuurtje. Doe de stappen in deze volgorde.
 7. Scrol naar **Private keys** → **Generate a private key**. Er wordt een
    `.pem`-bestand gedownload. Bewaar het goed: dit is de sleutel.
 8. Klik links op **Install App** → **Install** naast ligolimino →
-   **Only select repositories** → kies **audio** → **Install**.
+   **Only select repositories** → kies **assets** → **Install**.
 
 ## Stap 2. De Worker maken bij Cloudflare
 
@@ -74,7 +74,7 @@ Open in je browser het adres van de Worker met `/status` erachter, bv.
 - `{"ok":true}`: alles werkt.
 - `{"ok":false, ...}`: de uitleg staat bij `detail`. Meestal is het App ID
   fout, is het .pem-bestand niet volledig geplakt, of is de App niet op de
-  repository **audio** geïnstalleerd (stap 1.8).
+  repository **assets** geïnstalleerd (stap 1.8).
 
 ## Stap 4. Het adres in de createpagina zetten
 
@@ -103,7 +103,15 @@ Push de createpagina. Klaar: bij een woord zonder opname verschijnt nu
 | Iemand neemt het beheer over | Geef die persoon toegang tot het ligolimino-account op GitHub en Cloudflare. |
 | Uploaden lukt niet meer | Kijk naar `.../status` (stap 3). Ondertussen kan uploaden altijd rechtstreeks via GitHub. |
 | Verbinding helemaal uitschakelen | Zet `UPLOAD_URL` in `create/index.html` terug op `""`. |
-| Een foute opname weghalen | Rechtstreeks in de repository **audio** op GitHub (de Worker kan niets verwijderen). |
+| Een foute opname weghalen | Rechtstreeks in de repository **assets** op GitHub (de Worker kan niets verwijderen). |
 
 Gratis limiet van Cloudflare: 100.000 aanvragen per dag. Dat is ruim
 voldoende.
+
+## De Worker bijwerken
+
+Komt er een nieuwe versie van `worker.js` (zoals bij de overstap naar de
+repository **assets** en de afbeeldingen): Cloudflare → **Workers & Pages** →
+`letterlab-upload` → **Edit code** → alles vervangen door de nieuwe
+`worker.js` → **Deploy**. De instellingen (App ID, sleutel, teamcode) blijven
+gewoon staan.

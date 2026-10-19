@@ -3,11 +3,12 @@
 // ----------------------------------------------------------------
 // Deze kleine 'brievenbus' draait gratis bij Cloudflare Workers.
 // De createpagina stuurt er een nieuwe opname naartoe; de Worker zet
-// ze in de GitHub-repository ligolimino/audio.
+// ze in de GitHub-repository ligolimino/assets.
 //
-// Wat de Worker WEL doet:   een NIEUW mp3-bestand toevoegen.
+// Wat de Worker WEL doet:   een NIEUWE opname (mp3) of afbeelding
+//                           (webp, jpg, png) toevoegen.
 // Wat de Worker NOOIT doet: een bestaand bestand overschrijven of
-//                           verwijderen, of iets buiten de audio-repo.
+//                           verwijderen, of iets buiten de assets-repo.
 //
 // Instellingen (Cloudflare → Worker → Settings → Variables and Secrets):
 //   GITHUB_APP_ID       het App ID van de GitHub App (een getal)
@@ -15,21 +16,22 @@
 //   TEAMCODE            de code die collega's intypen             (secret)
 // Optioneel:
 //   GITHUB_OWNER        standaard: ligolimino
-//   GITHUB_REPO         standaard: audio
+//   GITHUB_REPO         standaard: assets
 //   ALLOWED_ORIGINS     standaard: https://ligolimino.github.io
 //                       (meerdere adressen scheiden met een komma)
 //
 // Zie HANDLEIDING.md in dezelfde map.
 // ================================================================
 
-const MAX_BYTES = 3 * 1024 * 1024; // 3 MB per opname is ruim voldoende.
+const MAX_BYTES = 3 * 1024 * 1024; // 3 MB per bestand is ruim voldoende.
 
-// Soorten opnames en hun map in de audio-repository.
+// Soorten bestanden en hun plaats in de assets-repository.
 const KINDS = {
-    woord: (name) => `woorden/${name.charAt(0)}/${name}.mp3`,
-    nonsens: (name) => `woorden/nonsens/${name}.mp3`,
-    instructie: (name) => `instructies/${name}.mp3`,
-    zin: (name) => `zinnen/${name}.mp3`,
+    woord: (name) => `audio/woorden/${name.charAt(0)}/${name}.mp3`,
+    nonsens: (name) => `audio/woorden/nonsens/${name}.mp3`,
+    instructie: (name) => `audio/instructies/${name}.mp3`,
+    zin: (name) => `audio/zinnen/${name}.mp3`,
+    afbeelding: (name, extension) => `afbeeldingen/${name}.${extension}`,
 };
 
 // Namen die Windows niet toelaat ('nul' wordt 'nul_').
@@ -45,7 +47,7 @@ export default {
         const url = new URL(request.url);
         try {
             if (url.pathname === "/status" && request.method === "GET") {
-                // Kan de Worker echt bij de audio-repository? Alleen dan 'ok'.
+                // Kan de Worker echt bij de assets-repository? Alleen dan 'ok'.
                 await checkRepository(env);
                 return json({ ok: true }, 200, cors);
             }
@@ -98,18 +100,24 @@ async function upload(request, env, cors) {
 
     let bytes;
     try {
-        bytes = base64ToBytes(String(body.mp3 || ""));
+        bytes = base64ToBytes(String(body.bestand || body.mp3 || ""));
     } catch {
         return json({ ok: false, fout: "Het bestand is beschadigd." }, 400, cors);
     }
     if (bytes.length < 200 || bytes.length > MAX_BYTES) {
-        return json({ ok: false, fout: "De opname is te kort of te groot (max. 3 MB)." }, 400, cors);
+        return json({ ok: false, fout: "Het bestand is te klein of te groot (max. 3 MB)." }, 400, cors);
     }
-    if (!looksLikeMp3(bytes)) {
+    let extension = "mp3";
+    if (kind === "afbeelding") {
+        extension = imageExtension(bytes);
+        if (!extension) {
+            return json({ ok: false, fout: "Dit is geen afbeelding (webp, jpg of png)." }, 400, cors);
+        }
+    } else if (!looksLikeMp3(bytes)) {
         return json({ ok: false, fout: "Dit is geen mp3-bestand." }, 400, cors);
     }
 
-    const path = KINDS[kind](name);
+    const path = KINDS[kind](name, extension);
     const token = await installationToken(env);
     const api = `https://api.github.com/repos/${owner(env)}/${repo(env)}/contents/${encodePath(path)}`;
 
@@ -124,18 +132,21 @@ async function upload(request, env, cors) {
 
     // Windows ziet 'Typ het woord' en 'typ het woord' als hetzelfde
     // bestand. Daarom kijken we bij instructies ook hoofdletterongevoelig.
-    if (kind === "instructie") {
+    // Bij afbeeldingen telt dezelfde naam met een andere extensie
+    // (kat.jpg naast kat.webp) ook als 'bestaat al'.
+    if (kind === "instructie" || kind === "afbeelding") {
+        const folderPath = kind === "instructie" ? "audio/instructies" : "afbeeldingen";
         const folder = await github(
-            `https://api.github.com/repos/${owner(env)}/${repo(env)}/contents/instructies`,
+            `https://api.github.com/repos/${owner(env)}/${repo(env)}/contents/${folderPath}`,
             token,
             { method: "GET" },
         );
         if (folder.status === 200) {
-            const wanted = `${name}.mp3`.toLowerCase();
-            const same = (await folder.json()).find((item) => item.name.toLowerCase() === wanted);
+            const base = (file) => file.toLowerCase().replace(/\.[a-z0-9]{2,4}$/, "");
+            const same = (await folder.json()).find((item) => base(item.name) === name.toLowerCase());
             if (same) {
                 return json(
-                    { ok: false, bestaat: true, pad: `instructies/${same.name}`, fout: "Deze instructie bestaat al." },
+                    { ok: false, bestaat: true, pad: `${folderPath}/${same.name}`, fout: "Dit bestand bestaat al." },
                     409,
                     cors,
                 );
@@ -149,7 +160,7 @@ async function upload(request, env, cors) {
     const put = await github(api, token, {
         method: "PUT",
         body: JSON.stringify({
-            message: `Nieuwe opname: ${path}`,
+            message: `Nieuw bestand: ${path}`,
             content: bytesToBase64(bytes),
         }),
     });
@@ -171,7 +182,7 @@ function cleanName(kind, raw) {
         if (!/^[a-zà-ÿ]{1,40}$/.test(name)) return "";
         return RESERVED_NAMES.includes(name) ? `${name}_` : name;
     }
-    if (kind === "zin") {
+    if (kind === "zin" || kind === "afbeelding") {
         name = name
             .toLowerCase()
             .replace(/[.?!,;:]+$/, "")
@@ -188,6 +199,14 @@ function cleanName(kind, raw) {
     if (name.startsWith(".")) return "";
     if (RESERVED_NAMES.includes(name.toLowerCase())) return `${name}_`;
     return name;
+}
+
+function imageExtension(bytes) {
+    const text = (from, to) => String.fromCharCode(...bytes.subarray(from, to));
+    if (text(0, 4) === "RIFF" && text(8, 12) === "WEBP") return "webp";
+    if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpg";
+    if (bytes[0] === 0x89 && text(1, 4) === "PNG") return "png";
+    return "";
 }
 
 function looksLikeMp3(bytes) {
@@ -222,7 +241,7 @@ async function sha256(text) {
 // GitHub App: aanmelden
 // ------------------------------------------------------------
 
-// Vraagt de gegevens van de audio-repository op. Lukt dat niet, dan
+// Vraagt de gegevens van de assets-repository op. Lukt dat niet, dan
 // werkt de verbinding niet en meldt /status dat ook.
 async function checkRepository(env) {
     const api = `https://api.github.com/repos/${owner(env)}/${repo(env)}`;
@@ -233,7 +252,7 @@ async function checkRepository(env) {
         response = await github(api, await installationToken(env), { method: "GET" });
     }
     if (response.status !== 200) {
-        throw new Error(`De audio-repository is niet bereikbaar (${response.status}).`);
+        throw new Error(`De assets-repository is niet bereikbaar (${response.status}).`);
     }
 }
 
@@ -347,7 +366,7 @@ function owner(env) {
 }
 
 function repo(env) {
-    return (env.GITHUB_REPO || "audio").trim();
+    return (env.GITHUB_REPO || "assets").trim();
 }
 
 function github(url, token, { method, body, bearer }) {
