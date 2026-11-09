@@ -15,6 +15,7 @@ Online: `https://ligolimino.github.io/assets/...`
 | `audio/instructies/` | instructies; de naam is de tekst | `audio/instructies/Typ het woord.mp3` |
 | `audio/zinnen/` | zinnen en andere opnames met een eigen naam | `audio/zinnen/de-koffie.mp3` |
 | `afbeeldingen/` | afbeeldingen (verkleind, meestal WebP) | `afbeeldingen/kat.webp` |
+| `video/schrijven/` | schrijffilmpjes (vierkant, 720 x 720, zonder geluid); de naam is de letter of het cijfer | `video/schrijven/eu.mp4`, `video/schrijven/7.mp4` |
 | `upload/` | de uploadverbinding (Cloudflare Worker) en de handleiding | |
 
 ## Afspraken over bestandsnamen
